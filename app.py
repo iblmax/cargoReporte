@@ -35,6 +35,9 @@ def descargar_excel_profesional(df, titulo_reporte):
         for col_num, value in enumerate(df.columns.values):
             worksheet.write(3, col_num, value, fmt_header)
             worksheet.set_column(col_num, col_num, 18)
+
+        # ✅ Autofiltro en cabecera
+        worksheet.autofilter(3, 0, 3, len(df.columns)-1)
         
         for row in range(len(df_clean)):
             for col in range(len(df_clean.columns)):
@@ -116,7 +119,6 @@ if st.session_state.columnas_confirmadas:
         with st.expander("📝 Formulario de Registro", expanded=True):
             with st.form("form_gestion"):
                 nuevos = {}
-                # Solo muestra los campos de las columnas seleccionadas en el multiselect
                 f_cols = st.columns(3)
                 for i, col in enumerate(cols_v):
                     val = df.loc[st.session_state.registro_a_editar, col] if st.session_state.modo == "editar" else ""
@@ -124,7 +126,6 @@ if st.session_state.columnas_confirmadas:
                 
                 c_f1, c_f2 = st.columns(2)
                 if c_f1.form_submit_button("💾 Guardar Cambios"):
-                    # Conservar datos de columnas no visibles
                     fila_base = df.loc[st.session_state.registro_a_editar].to_dict() if st.session_state.modo == "editar" else {c: "" for c in df.columns}
                     fila_base.update(nuevos)
                     
@@ -158,13 +159,12 @@ if st.session_state.columnas_confirmadas:
             df_e = df_e[c_e]
         
         if 'FECHA' in df_e.columns: df_e['FECHA'] = df_e['FECHA'].dt.strftime('%d/%m/%Y')
-        st.dataframe(df_e, use_container_width=True) #
+        st.dataframe(df_e, use_container_width=True)
         
         btn_e = descargar_excel_profesional(df_e, "Reporte de Operaciones")
         st.download_button("🚀 Generar Excel de Datos", btn_e, "Reporte_Cargo.xlsx")
 
     with t2:
-        # Uso de la línea solicitada: unsafe_allow_html=True
         st.markdown("<h3 style='text-align: center;'>CUADRO ESTADÍSTICO DE OPERACIONES</h3>", unsafe_allow_html=True)
         op_calc = st.radio("Cálculo:", ["Contar Registros", "Sumar Cantidades"], horizontal=True)
         c_stats = st.multiselect("Columnas para totalizar:", [c for c in df.columns if c != 'FECHA'])
