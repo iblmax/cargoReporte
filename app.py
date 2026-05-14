@@ -158,7 +158,7 @@ if st.session_state.columnas_confirmadas:
         st.download_button("🚀 Generar Excel de Datos", btn_e, "Reporte_Cargo.xlsx")
 
     with t2:
-        st.markdown("<h3 style='text-align: center;'>CUADRO ESTADÍSTICO DE OPERACIONES</h3>", unsafe_content_type=True)
+        st.markdown("<h3 style='text-align: center;'>CUADRO ESTADÍSTICO DE OPERACIONES</h3>", unsafe_allow_html=True)
         op_calc = st.radio("Tipo de operación:", ["Contar Registros (Suma 1)", "Sumar Cantidades (Total de Columna)"], horizontal=True)
         c_stats = st.multiselect("Seleccionar columnas para totalizar:", [c for c in df.columns if c != 'FECHA'])
         
