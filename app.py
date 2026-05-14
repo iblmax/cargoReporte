@@ -7,7 +7,7 @@ from datetime import datetime
 # Configuración de página
 st.set_page_config(page_title="Sistema CARGO PESCA PRO", layout="wide")
 
-# Inicialización de estados
+# Inicialización de estados para no perder el hilo de lo implementado
 if "df_editada" not in st.session_state: st.session_state.df_editada = None
 if "columnas_confirmadas" not in st.session_state: st.session_state.columnas_confirmadas = False
 if "modo" not in st.session_state: st.session_state.modo = None
@@ -16,7 +16,7 @@ if "registro_a_editar" not in st.session_state: st.session_state.registro_a_edit
 estilos.aplicar_estilos()
 estilos.mostrar_cabecera()
 
-# --- FUNCIÓN DE EXCEL PROFESIONAL (Punto 6) ---
+# --- FUNCIÓN DE EXCEL PROFESIONAL MEJORADA (Punto 6) ---
 def descargar_excel_profesional(df, titulo_reporte):
     output = BytesIO()
     df_clean = df.fillna("")
@@ -25,7 +25,7 @@ def descargar_excel_profesional(df, titulo_reporte):
         workbook = writer.book
         worksheet = writer.sheets['Reporte']
 
-        # Formatos solicitados (Azul con blanco para títulos)
+        # Formatos: Azul con blanco para títulos
         fmt_titulo = workbook.add_format({'bold': True, 'font_size': 14, 'align': 'center'})
         fmt_header = workbook.add_format({'bold': True, 'bg_color': '#0070C0', 'font_color': 'white', 'border': 1, 'align': 'center'})
         fmt_celda = workbook.add_format({'border': 1, 'align': 'center'})
@@ -33,12 +33,9 @@ def descargar_excel_profesional(df, titulo_reporte):
         # Título arriba de la tabla
         worksheet.merge_range(1, 0, 1, len(df.columns)-1, titulo_reporte.upper(), fmt_titulo)
 
-        # Aplicar formatos dinámicos
         for col_num, value in enumerate(df.columns.values):
             worksheet.write(3, col_num, value, fmt_header)
-            # Ajuste automático de ancho de columna
-            width = max(len(str(value)), 15)
-            worksheet.set_column(col_num, col_num, width)
+            worksheet.set_column(col_num, col_num, 18)
         
         for row in range(len(df_clean)):
             for col in range(len(df_clean.columns)):
@@ -59,30 +56,24 @@ if archivo and not st.session_state.columnas_confirmadas:
         idx_titulo = st.number_input("Número de Índice:", 0, 14, 0)
         
         if st.button("✅ Confirmar Estructura", type="primary"):
-            try:
-                if orientacion == "Horizontal (Fila)":
-                    df_res = pd.read_excel(archivo, skiprows=idx_titulo)
-                else:
-                    df_raw = pd.read_excel(archivo, header=None)
-                    df_res = df_raw.iloc[:, idx_titulo:].T
-                    df_res.columns = df_res.iloc[0]
-                    df_res = df_res.drop(df_res.index[0]).reset_index(drop=True)
+            if orientacion == "Horizontal (Fila)":
+                df_res = pd.read_excel(archivo, skiprows=idx_titulo)
+            else:
+                df_raw = pd.read_excel(archivo, header=None)
+                df_res = df_raw.iloc[:, idx_titulo:].T
+                df_res.columns = df_res.iloc[0]
+                df_res = df_res.drop(df_res.index[0]).reset_index(drop=True)
 
-                # Limpieza de columnas y búsqueda de Fecha
-                df_res.columns = [str(c).strip().upper() for c in df_res.columns]
-                c_f = next((c for c in df_res.columns if 'FECHA' in c), None)
-                if c_f:
-                    df_res.rename(columns={c_f: 'FECHA'}, inplace=True)
-                    df_res['FECHA'] = pd.to_datetime(df_res['FECHA'], errors='coerce')
-                else:
-                    # Si no hay columna FECHA, la creamos para evitar el KeyError
-                    df_res['FECHA'] = pd.Timestamp.now()
-                
-                st.session_state.df_editada = df_res
-                st.session_state.columnas_confirmadas = True
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error al procesar: {e}")
+            # Estandarización de columna FECHA
+            df_res.columns = [str(c).strip().upper() for c in df_res.columns]
+            c_f = next((c for c in df_res.columns if 'FECHA' in c), None)
+            if c_f:
+                df_res.rename(columns={c_f: 'FECHA'}, inplace=True)
+                df_res['FECHA'] = pd.to_datetime(df_res['FECHA'], errors='coerce')
+            
+            st.session_state.df_editada = df_res
+            st.session_state.columnas_confirmadas = True
+            st.rerun()
 
     with c2:
         def highlight(x):
@@ -93,10 +84,10 @@ if archivo and not st.session_state.columnas_confirmadas:
             else:
                 if idx_titulo in x.columns: ds.loc[:, idx_titulo] = color
             return ds
-        st.write("Vista Previa:")
+        st.write("Vista Previa (Marcado en verde):")
         st.dataframe(df_ref.style.apply(highlight, axis=None), use_container_width=True)
 
-# --- INTERFAZ POST-CARGA ---
+# --- INTERFAZ DE GESTIÓN ---
 if st.session_state.columnas_confirmadas:
     df = st.session_state.df_editada
 
@@ -104,77 +95,90 @@ if st.session_state.columnas_confirmadas:
     st.subheader("🔍 Gestión y Edición")
     cols_v = st.multiselect("Seleccionar columnas visibles:", df.columns.tolist(), default=df.columns.tolist()[:7])
 
-    # 3. BOTONES DE GESTIÓN (Punto 3)
+    # 3. GESTIÓN DE REGISTROS (Punto 3 + Botón Limpiar)
     df_disp = df.copy()
     if 'FECHA' in df_disp.columns:
         df_disp['FECHA_V'] = df_disp['FECHA'].dt.strftime('%d/%m/%Y')
     
     df_disp.insert(0, "SELEC", False)
-    # Mostramos las columnas elegidas + la de selección
-    cols_to_show = ["SELEC"] + ([c for c in cols_v if c != 'FECHA'] + (['FECHA_V'] if 'FECHA' in df.columns else []))
-    editor = st.data_editor(df_disp[cols_to_show], hide_index=True, use_container_width=True)
+    cols_finales = ["SELEC"] + ([c for c in cols_v if c != 'FECHA'] + (['FECHA_V'] if 'FECHA' in df.columns else []))
+    editor = st.data_editor(df_disp[cols_finales], hide_index=True, use_container_width=True)
     
-    indices = editor[editor["SELEC"] == True].index.tolist()
+    marcados = editor[editor["SELEC"] == True].index.tolist()
 
     bg1, bg2, bg3 = st.columns(3)
-    if bg1.button("🔧 Editar Registro", disabled=not indices):
-        st.session_state.modo = "editar"; st.session_state.registro_a_editar = indices[0]
-    if bg2.button("🗑️ Eliminar Registro", type="primary", disabled=not indices):
-        st.session_state.modo = "confirmar_borrado"; st.session_state.indices_borrar = indices
+    if bg1.button("🔧 Editar Registro", disabled=not marcados):
+        st.session_state.modo = "editar"; st.session_state.registro_a_editar = marcados[0]
+    if bg2.button("🗑️ Eliminar Registro", type="primary", disabled=not marcados):
+        st.session_state.modo = "confirmar_borrado"; st.session_state.indices_borrar = marcados
     if bg3.button("➕ Agregar Registro"):
         st.session_state.modo = "nuevo"
 
-    # Formularios Dinámicos
+    # Formulario con botón LIMPIAR
     if st.session_state.modo in ["editar", "nuevo"]:
-        with st.form("form_gestion"):
-            st.write(f"### {st.session_state.modo.upper()}")
-            nuevos = {}
-            f_cols = st.columns(3)
-            for i, col in enumerate(df.columns):
-                val = df.loc[st.session_state.registro_a_editar, col] if st.session_state.modo == "editar" else ""
-                nuevos[col] = f_cols[i % 3].text_input(col, value=str(val))
-            if st.form_submit_button("💾 Guardar"):
-                # Lógica de guardado...
-                st.session_state.modo = None; st.rerun()
+        with st.expander("📝 Formulario de Datos", expanded=True):
+            with st.form("form_reg"):
+                nuevos = {}
+                f_cols = st.columns(3)
+                for i, col in enumerate(df.columns):
+                    val = df.loc[st.session_state.registro_a_editar, col] if st.session_state.modo == "editar" else ""
+                    nuevos[col] = f_cols[i % 3].text_input(col, value=str(val))
+                
+                c_f1, c_f2 = st.columns(2)
+                if c_f1.form_submit_button("💾 Guardar"):
+                    # Lógica de guardado...
+                    st.session_state.modo = None; st.rerun()
+                if c_f2.form_submit_button("🧹 Limpiar y Cerrar"):
+                    st.session_state.modo = None; st.rerun()
 
     if st.session_state.modo == "confirmar_borrado":
-        if st.button("⚠️ CONFIRMAR ELIMINACIÓN"):
+        st.warning(f"¿Eliminar {len(st.session_state.indices_borrar)} registros?")
+        if st.button("✔️ Confirmar"):
             st.session_state.df_editada = df.drop(st.session_state.indices_borrar).reset_index(drop=True)
             st.session_state.modo = None; st.rerun()
+        if st.button("❌ Cancelar"):
+            st.session_state.modo = None; st.rerun()
 
+    # --- 4 Y 5. REPORTES Y ESTADÍSTICAS (Punto 4, 5 y Total General) ---
     st.write("---")
-    t1, t2 = st.tabs(["📄 Exportación", "📉 Estadísticas"])
+    st.subheader("📊 Paso 3: Reportes de Totales")
+    t1, t2 = st.tabs(["📄 Exportación de Datos", "📉 Cuadro Estadístico de Totales"])
 
-    # 4. EXPORTACIÓN (Punto 4)
     with t1:
-        st.write("### REPORTE DE EXPORTACIÓN")
-        tipo_exp = st.radio("Modo:", ["Completo", "Seleccionar Columnas"], horizontal=True)
+        tipo_exp = st.radio("Alcance:", ["Completo", "Filtrado por columna"], horizontal=True)
         df_e = df.copy()
-        if tipo_exp == "Seleccionar Columnas":
-            c_e = st.multiselect("Columnas:", df.columns.tolist(), default=df.columns.tolist())
+        if tipo_exp == "Filtrado por columna":
+            c_e = st.multiselect("Columnas a exportar:", df.columns.tolist(), default=df.columns.tolist())
             df_e = df_e[c_e]
         
         if 'FECHA' in df_e.columns: df_e['FECHA'] = df_e['FECHA'].dt.strftime('%d/%m/%Y')
         st.dataframe(df_e, use_container_width=True)
         
-        btn_e = descargar_excel_profesional(df_e, "Reporte de Exportación de Datos")
-        st.download_button("⬇️ Descargar Exportación", btn_e, "Exportacion.xlsx")
+        btn_e = descargar_excel_profesional(df_e, "Reporte Detallado de Operaciones")
+        st.download_button("🚀 Generar Excel de Datos", btn_e, "Reporte_Cargo.xlsx")
 
-    # 5. ESTADÍSTICAS (Punto 5)
     with t2:
-        st.write("### CUADRO ESTADÍSTICO")
-        op_calc = st.radio("Cálculo:", ["Sumar 1 (Conteo)", "Sumar Total de Columna"], horizontal=True)
-        c_stats = st.multiselect("Columnas para el total:", [c for c in df.columns if c != 'FECHA'])
+        st.markdown("<h3 style='text-align: center;'>CUADRO ESTADÍSTICO DE OPERACIONES</h3>", unsafe_content_type=True)
+        op_calc = st.radio("Tipo de operación:", ["Contar Registros (Suma 1)", "Sumar Cantidades (Total de Columna)"], horizontal=True)
+        c_stats = st.multiselect("Seleccionar columnas para totalizar:", [c for c in df.columns if c != 'FECHA'])
         
         if c_stats and 'FECHA' in df.columns:
             res = df.copy()
-            if "Total" in op_calc:
+            if "Cantidades" in op_calc:
                 for c in c_stats: res[c] = pd.to_numeric(res[c].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
             
-            resumen = res.groupby(res['FECHA'].dt.date)[c_stats].agg('sum' if "Total" in op_calc else 'count').reset_index()
-            resumen['FECHA'] = pd.to_datetime(resumen['FECHA']).dt.strftime('%d/%m/%Y')
+            resumen = res.groupby(res['FECHA'].dt.date)[c_stats].agg('sum' if "Cantidades" in op_calc else 'count').reset_index()
             
-            st.table(resumen)
+            # FILA TOTAL GENERAL (Punto 5)
+            totales = {col: resumen[col].sum() for col in c_stats}
+            totales['FECHA'] = "TOTAL GENERAL"
+            resumen_final = pd.concat([resumen, pd.DataFrame([totales])], ignore_index=True)
+            resumen_final['FECHA'] = resumen_final['FECHA'].apply(lambda x: x.strftime('%d/%m/%Y') if isinstance(x, datetime) or hasattr(x, 'strftime') else x)
             
-            btn_s = descargar_excel_profesional(resumen, "Cuadro Estadístico de Operaciones")
-            st.download_button("⬇️ Descargar Estadísticas", btn_s, "Estadisticas.xlsx")
+            # Centrar tabla en pantalla
+            _, col_mid, _ = st.columns([1, 4, 1])
+            with col_mid:
+                st.table(resumen_final)
+            
+            btn_s = descargar_excel_profesional(resumen_final, "Cuadro Estadístico de Totales")
+            st.download_button("🚀 Exportar Cuadro de Totales Profesional", btn_s, "Estadisticas_Cargo.xlsx")
