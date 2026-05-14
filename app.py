@@ -16,8 +16,6 @@ if "df_editada" not in st.session_state:
     st.session_state.df_editada = None
 if "columnas_confirmadas" not in st.session_state:
     st.session_state.columnas_confirmadas = False
-if "modo" not in st.session_state:
-    st.session_state.modo = None
 
 st.write("---")
 
@@ -72,6 +70,7 @@ if st.session_state.columnas_confirmadas and st.session_state.df_editada is not 
     st.subheader("🔍 Paso 2: Gestión y Edición")
     col_g1, col_g2, col_g3 = st.columns([1, 1, 1])
     with col_g1:
+        # Selector de fecha estilo calendario visual
         f_dia = st.date_input("📅 Seleccionar Día para Gestionar:", 
                              value=df['FECHA'].min().date() if not df.empty else datetime.now())
     with col_g2:
@@ -92,17 +91,6 @@ if st.session_state.columnas_confirmadas and st.session_state.df_editada is not 
     editor = st.data_editor(df_sel, hide_index=False, use_container_width=True, key="main_editor")
     marcados = editor[editor["SELECCIONAR"] == True].index.tolist()
 
-    # Botones de Acción
-    cg1, cg2, cg3 = st.columns(3)
-    if cg1.button("🔧 Editar Marcados", disabled=not marcados):
-        st.session_state.modo = "editar"
-        st.session_state.indices_form = marcados
-    if cg2.button("🗑️ Eliminar Marcados", type="primary", disabled=not marcados):
-        st.session_state.df_editada = st.session_state.df_editada.drop(marcados).reset_index(drop=True)
-        st.rerun()
-    if cg3.button("➕ Nuevo Registro"):
-        st.session_state.modo = "agregar"
-
     # --- SECCIÓN: REPORTES INTEGRADOS ---
     st.write("---")
     st.subheader("📊 Paso 3: Reportes de Totales")
@@ -110,18 +98,34 @@ if st.session_state.columnas_confirmadas and st.session_state.df_editada is not 
     tab_datos, tab_totales = st.tabs(["📄 Exportación de Datos", "📉 Cuadro Estadístico de Totales"])
 
     with tab_datos:
-        st.write("### Generar Reporte de Exportación")
+        st.write("### Configurar Reporte de Exportación")
         m_reporte = st.radio("Alcance:", ["Completo", "Filtrado por fecha actual"], horizontal=True)
+        
+        # MEJORA: Selección de columnas para la exportación
+        cols_exportar = st.multiselect("Seleccionar columnas a exportar:", 
+                                      options=df.columns.tolist(), 
+                                      default=df.columns.tolist())
+        
         df_export = df.copy() if m_reporte == "Completo" else df_f.copy()
+        df_export = df_export[cols_exportar]
+        
         if 'FECHA' in df_export.columns:
             df_export['FECHA'] = df_export['FECHA'].dt.strftime('%d/%m/%Y')
+            
         st.dataframe(df_export, use_container_width=True)
-        if st.button("🚀 Exportar Excel de Datos"):
+        
+        if st.button("🚀 Generar Excel de Datos"):
             buf = procesador.generar_excel_formateado(df_export)
             st.download_button("⬇️ Descargar Reporte", buf, "reporte_datos.xlsx")
 
     with tab_totales:
-        st.write("### Cuadro Estadístico Personalizado")
+        st.write("### Cuadro Estadístico de Totales Personalizado")
+        
+        # MEJORA: Opción de Tipo de Cálculo (Sumar 1 o Sumar Valores)
+        tipo_calculo = st.radio("Tipo de operación para el reporte:", 
+                               ["Contar Registros (Suma 1 por dato)", "Sumar Cantidades (Suma los números de la columna)"],
+                               horizontal=True)
+        
         opciones_cols = [c for c in df.columns if c != 'FECHA']
         cols_stats = st.multiselect("Seleccionar columnas para totalizar:", 
                                    options=opciones_cols, 
@@ -135,22 +139,33 @@ if st.session_state.columnas_confirmadas and st.session_state.df_editada is not 
         
         if not df_r.empty and cols_stats:
             df_r['FECHA_TXT'] = df_r['FECHA'].dt.strftime('%d/%m/%Y')
-            agg_map = {c: ('sum' if pd.api.types.is_numeric_dtype(df_r[c]) else 'count') for c in cols_stats}
+            
+            # Aplicación de lógica de cálculo seleccionada
+            if "Contar" in tipo_calculo:
+                agg_map = {c: 'count' for c in cols_stats}
+            else:
+                # Asegurar que las columnas sean numéricas para sumar valores
+                for c in cols_stats:
+                    df_r[c] = pd.to_numeric(df_r[c], errors='coerce').fillna(0)
+                agg_map = {c: 'sum' for c in cols_stats}
+                
             resumen = df_r.groupby('FECHA_TXT').agg(agg_map).reset_index()
             resumen.rename(columns={'FECHA_TXT': 'FECHA'}, inplace=True)
             
+            # Fila de Total General con bordes y celdas ajustadas
             tot_row = {"FECHA": "TOTAL GENERAL"}
             for c in cols_stats: tot_row[c] = resumen[c].sum()
             df_final_totales = pd.concat([resumen, pd.DataFrame([tot_row])], ignore_index=True)
             
             st.table(df_final_totales)
 
-            if st.button("🚀 Exportar Cuadro de Totales"):
+            if st.button("🚀 Exportar Cuadro de Totales Profesional"):
                 out = BytesIO()
                 with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
                     df_final_totales.to_excel(writer, index=False, sheet_name='Totales')
                     workbook, worksheet = writer.book, writer.sheets['Totales']
-                    fmt = workbook.add_format({'border': 1, 'align': 'center'})
+                    # Formato con bordes y alineación central
+                    fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter'})
                     for i, col in enumerate(df_final_totales.columns):
                         worksheet.set_column(i, i, 18, fmt)
-                st.download_button("⬇️ Descargar Totales", out.getvalue(), "totales.xlsx")
+                st.download_button("⬇️ Descargar Cuadro de Totales", out.getvalue(), "totales_pesca.xlsx")
