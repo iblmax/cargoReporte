@@ -209,7 +209,6 @@ if st.session_state.modo in ["editar", "nuevo"]:
                 st.session_state.modo = None
                 st.rerun()
 
-
     # --- ELIMINACIÓN ---
     if st.session_state.modo == "confirmar_borrado":
         if st.button("⚠️ Confirmar Eliminación", key="btn_confirmar_borrado"):
@@ -221,16 +220,17 @@ if st.session_state.modo in ["editar", "nuevo"]:
             st.session_state.modo = None
             st.rerun()
 
-    # --- REPORTES Y ESTADÍSTICAS ---
+# --- REPORTES Y ESTADÍSTICAS ---
+if st.session_state.columnas_confirmadas:
     st.write("---")
     st.subheader("📊 Paso 3: Reportes de Totales")
     t1, t2, t3 = st.tabs(["📄 Exportación de Datos", "📉 Cuadro Estadístico de Totales", "📈 Gráficos Interactivos"])
 
     with t1:
         tipo_exp = st.radio("Alcance:", ["Completo", "Filtrado por columna"], horizontal=True, key="radio_export")
-        df_e = df.copy()
+        df_e = st.session_state.df_editada.copy()
         if tipo_exp == "Filtrado por columna":
-            c_e = st.multiselect("Columnas de exportación:", df.columns.tolist(), default=df.columns.tolist(), key="multiselect_export")
+            c_e = st.multiselect("Columnas de exportación:", st.session_state.df_editada.columns.tolist(), default=st.session_state.df_editada.columns.tolist(), key="multiselect_export")
             df_e = df_e[c_e]
         
         if 'FECHA' in df_e.columns: 
@@ -243,10 +243,10 @@ if st.session_state.modo in ["editar", "nuevo"]:
     with t2:
         st.markdown("<h3 style='text-align: center;'>CUADRO ESTADÍSTICO DE OPERACIONES</h3>", unsafe_allow_html=True)
         op_calc = st.radio("Cálculo:", ["Contar Registros", "Sumar Cantidades"], horizontal=True, key="radio_calc")
-        c_stats = st.multiselect("Columnas para totalizar:", [c for c in df.columns if c != 'FECHA'], key="multiselect_stats")
+        c_stats = st.multiselect("Columnas para totalizar:", [c for c in st.session_state.df_editada.columns if c != 'FECHA'], key="multiselect_stats")
         
-        if c_stats and 'FECHA' in df.columns:
-            res = df.copy()
+        if c_stats and 'FECHA' in st.session_state.df_editada.columns:
+            res = st.session_state.df_editada.copy()
             if "Sumar" in op_calc:
                 for c in c_stats: 
                     res[c] = pd.to_numeric(res[c].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
@@ -267,10 +267,14 @@ if st.session_state.modo in ["editar", "nuevo"]:
 
     with t3:
         st.markdown("<h3 style='text-align: center;'>📈 Gráficos Interactivos</h3>", unsafe_allow_html=True)
-        if c_stats and 'FECHA' in df.columns:
-            chart_data = resumen.set_index("FECHA")
-            st.bar_chart(chart_data)
-            st.line_chart(chart_data)
+        if 'FECHA' in st.session_state.df_editada.columns:
+            c_stats_chart = st.multiselect("Columnas para gráficos:", [c for c in st.session_state.df_editada.columns if c != 'FECHA'], key="multiselect_chart")
+            if c_stats_chart:
+                res = st.session_state.df_editada.copy()
+                resumen = res.groupby(res['FECHA'].dt.date)[c_stats_chart].agg('sum').reset_index()
+                chart_data = resumen.set_index("FECHA")
+                st.bar_chart(chart_data)
+                st.line_chart(chart_data)
 
     # --- HISTORIAL DE CAMBIOS ---
     st.write("---")
