@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import estilos 
+import estilos
 from io import BytesIO
 from datetime import datetime
 
@@ -12,6 +12,7 @@ if "df_editada" not in st.session_state: st.session_state.df_editada = None
 if "columnas_confirmadas" not in st.session_state: st.session_state.columnas_confirmadas = False
 if "modo" not in st.session_state: st.session_state.modo = None
 if "registro_a_editar" not in st.session_state: st.session_state.registro_a_editar = None
+if "historial" not in st.session_state: st.session_state.historial = []
 
 estilos.aplicar_estilos()
 estilos.mostrar_cabecera()
@@ -25,7 +26,7 @@ def descargar_excel_profesional(df, titulo_reporte):
         workbook = writer.book
         worksheet = writer.sheets['Reporte']
 
-        # Estilos: Azul con blanco y bordes
+        # Estilos
         fmt_titulo = workbook.add_format({'bold': True, 'font_size': 14, 'align': 'center'})
         fmt_header = workbook.add_format({'bold': True, 'bg_color': '#0070C0', 'font_color': 'white', 'border': 1, 'align': 'center'})
         fmt_celda = workbook.add_format({'border': 1, 'align': 'center'})
@@ -36,7 +37,6 @@ def descargar_excel_profesional(df, titulo_reporte):
             worksheet.write(3, col_num, value, fmt_header)
             worksheet.set_column(col_num, col_num, 18)
 
-        # ✅ Autofiltro en cabecera
         worksheet.autofilter(3, 0, 3, len(df.columns)-1)
         
         for row in range(len(df_clean)):
@@ -49,44 +49,47 @@ def descargar_excel_profesional(df, titulo_reporte):
 archivo = st.file_uploader("Subir archivo de CARGO PESCA", type=["xlsx", "xls"])
 
 if archivo and not st.session_state.columnas_confirmadas:
-    st.subheader("🛠️ Paso 1: Configurar Estructura")
-    df_ref = pd.read_excel(archivo, header=None, nrows=15)
-    
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        orientacion = st.radio("📑 Títulos en:", ["Horizontal (Fila)", "Vertical (Columna)"])
-        idx_titulo = st.number_input("Número de Índice:", 0, 14, 0)
+    try:
+        st.subheader("🛠️ Paso 1: Configurar Estructura")
+        df_ref = pd.read_excel(archivo, header=None, nrows=15)
         
-        if st.button("✅ Confirmar Estructura", type="primary"):
-            if orientacion == "Horizontal (Fila)":
-                df_res = pd.read_excel(archivo, skiprows=idx_titulo)
-            else:
-                df_raw = pd.read_excel(archivo, header=None)
-                df_res = df_raw.iloc[:, idx_titulo:].T
-                df_res.columns = df_res.iloc[0]
-                df_res = df_res.drop(df_res.index[0]).reset_index(drop=True)
-
-            df_res.columns = [str(c).strip().upper() for c in df_res.columns]
-            c_f = next((c for c in df_res.columns if 'FECHA' in c), None)
-            if c_f:
-                df_res.rename(columns={c_f: 'FECHA'}, inplace=True)
-                df_res['FECHA'] = pd.to_datetime(df_res['FECHA'], errors='coerce')
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            orientacion = st.radio("📑 Títulos en:", ["Horizontal (Fila)", "Vertical (Columna)"])
+            idx_titulo = st.number_input("Número de Índice:", 0, 14, 0)
             
-            st.session_state.df_editada = df_res
-            st.session_state.columnas_confirmadas = True
-            st.rerun()
+            if st.button("✅ Confirmar Estructura", type="primary"):
+                if orientacion == "Horizontal (Fila)":
+                    df_res = pd.read_excel(archivo, skiprows=idx_titulo)
+                else:
+                    df_raw = pd.read_excel(archivo, header=None)
+                    df_res = df_raw.iloc[:, idx_titulo:].T
+                    df_res.columns = df_res.iloc[0]
+                    df_res = df_res.drop(df_res.index[0]).reset_index(drop=True)
 
-    with c2:
-        def highlight(x):
-            color = 'background-color: #d1e7dd'
-            ds = pd.DataFrame('', index=x.index, columns=x.columns)
-            if orientacion == "Horizontal (Fila)":
-                if idx_titulo in x.index: ds.loc[idx_titulo, :] = color
-            else:
-                if idx_titulo in x.columns: ds.loc[:, idx_titulo] = color
-            return ds
-        st.write("Vista Previa (Marcado en verde):")
-        st.dataframe(df_ref.style.apply(highlight, axis=None), use_container_width=True)
+                df_res.columns = [str(c).strip().upper() for c in df_res.columns]
+                c_f = next((c for c in df_res.columns if 'FECHA' in c), None)
+                if c_f:
+                    df_res.rename(columns={c_f: 'FECHA'}, inplace=True)
+                    df_res['FECHA'] = pd.to_datetime(df_res['FECHA'], errors='coerce')
+                
+                st.session_state.df_editada = df_res
+                st.session_state.columnas_confirmadas = True
+                st.rerun()
+
+        with c2:
+            def highlight(x):
+                color = 'background-color: #d1e7dd'
+                ds = pd.DataFrame('', index=x.index, columns=x.columns)
+                if orientacion == "Horizontal (Fila)":
+                    if idx_titulo in x.index: ds.loc[idx_titulo, :] = color
+                else:
+                    if idx_titulo in x.columns: ds.loc[:, idx_titulo] = color
+                return ds
+            st.write("Vista Previa (Marcado en verde):")
+            st.dataframe(df_ref.style.apply(highlight, axis=None), use_container_width=True)
+    except Exception as e:
+        st.error(f"❌ Error al procesar archivo: {e}")
 
 # --- INTERFAZ DE GESTIÓN ---
 if st.session_state.columnas_confirmadas:
@@ -131,8 +134,10 @@ if st.session_state.columnas_confirmadas:
                     
                     if st.session_state.modo == "editar":
                         st.session_state.df_editada.loc[st.session_state.registro_a_editar] = pd.Series(fila_base)
+                        st.session_state.historial.append(f"Editado registro {st.session_state.registro_a_editar}")
                     else:
                         st.session_state.df_editada = pd.concat([df, pd.DataFrame([fila_base])], ignore_index=True)
+                        st.session_state.historial.append("Agregado nuevo registro")
                     
                     st.session_state.modo = None; st.rerun()
                 
@@ -142,6 +147,7 @@ if st.session_state.columnas_confirmadas:
     if st.session_state.modo == "confirmar_borrado":
         if st.button("⚠️ Confirmar Eliminación"):
             st.session_state.df_editada = df.drop(st.session_state.indices_borrar).reset_index(drop=True)
+            st.session_state.historial.append(f"Eliminados registros {st.session_state.indices_borrar}")
             st.session_state.modo = None; st.rerun()
         if st.button("❌ Cancelar"):
             st.session_state.modo = None; st.rerun()
@@ -149,7 +155,7 @@ if st.session_state.columnas_confirmadas:
     # --- REPORTES Y ESTADÍSTICAS ---
     st.write("---")
     st.subheader("📊 Paso 3: Reportes de Totales")
-    t1, t2 = st.tabs(["📄 Exportación de Datos", "📉 Cuadro Estadístico de Totales"])
+    t1, t2, t3 = st.tabs(["📄 Exportación de Datos", "📉 Cuadro Estadístico de Totales", "📈 Gráficos Interactivos"])
 
     with t1:
         tipo_exp = st.radio("Alcance:", ["Completo", "Filtrado por columna"], horizontal=True)
@@ -158,7 +164,8 @@ if st.session_state.columnas_confirmadas:
             c_e = st.multiselect("Columnas de exportación:", df.columns.tolist(), default=df.columns.tolist())
             df_e = df_e[c_e]
         
-        if 'FECHA' in df_e.columns: df_e['FECHA'] = df_e['FECHA'].dt.strftime('%d/%m/%Y')
+                if 'FECHA' in df_e.columns: 
+            df_e['FECHA'] = df_e['FECHA'].dt.strftime('%d/%m/%Y')
         st.dataframe(df_e, use_container_width=True)
         
         btn_e = descargar_excel_profesional(df_e, "Reporte de Operaciones")
@@ -172,7 +179,8 @@ if st.session_state.columnas_confirmadas:
         if c_stats and 'FECHA' in df.columns:
             res = df.copy()
             if "Sumar" in op_calc:
-                for c in c_stats: res[c] = pd.to_numeric(res[c].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+                for c in c_stats: 
+                    res[c] = pd.to_numeric(res[c].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
             
             resumen = res.groupby(res['FECHA'].dt.date)[c_stats].agg('sum' if "Sumar" in op_calc else 'count').reset_index()
             
@@ -188,3 +196,23 @@ if st.session_state.columnas_confirmadas:
             
             btn_s = descargar_excel_profesional(res_final, "Cuadro Estadístico de Totales")
             st.download_button("🚀 Exportar Totales Profesionales", btn_s, "Estadisticas_Cargo.xlsx")
+
+    with t3:
+        st.markdown("<h3 style='text-align: center;'>📈 Gráficos Interactivos</h3>", unsafe_allow_html=True)
+        if c_stats and 'FECHA' in df.columns:
+            if "Sumar" in op_calc:
+                chart_data = resumen.set_index("FECHA")
+                st.bar_chart(chart_data)
+                st.line_chart(chart_data)
+            else:
+                chart_data = resumen.set_index("FECHA")
+                st.bar_chart(chart_data)
+        
+    # --- HISTORIAL DE CAMBIOS ---
+    st.write("---")
+    st.subheader("📜 Historial de Cambios")
+    if st.session_state.historial:
+        for h in st.session_state.historial:
+            st.write(f"- {h}")
+    else:
+        st.info("No se han registrado cambios aún.")
