@@ -197,23 +197,23 @@ if st.session_state.columnas_confirmadas:
         st.session_state.modo = "confirmar_borrado"; st.session_state.indices_borrar = indices
     if bg3.button("➕ Agregar Registro"):
         st.session_state.modo = "nuevo"
-    # FORMULARIO DE EDICIÓN / NUEVO
+        # FORMULARIO DE EDICIÓN / NUEVO
     if st.session_state.modo in ["editar", "nuevo"]:
         with st.expander("📝 Formulario de Registro", expanded=True):
-            with st.form("form_gestion"):
+            with st.form("form_gestion", clear_on_submit=False):
                 nuevos = {}
                 f_cols = st.columns(3)
 
                 # --- NO. GUIA ---
                 if st.session_state.modo == "editar" and len(st.session_state.indices_editar) > 1 and "NO. GUIA" in df.columns:
                     guias = df.loc[st.session_state.indices_editar, "NO. GUIA"].tolist()
-                    guia_sel = f_cols[0].selectbox("NO. GUIA", guias)
+                    guia_sel = f_cols[0].selectbox("NO. GUIA", guias, key="selectbox_guia")
                     idx_sel = df[df["NO. GUIA"] == guia_sel].index[0]
                     nuevos["NO. GUIA"] = guia_sel
                 else:
                     idx_sel = st.session_state.indices_editar[0] if st.session_state.modo == "editar" and st.session_state.indices_editar else None
                     val_guia = df.loc[idx_sel, "NO. GUIA"] if st.session_state.modo == "editar" and idx_sel is not None else ""
-                    nuevos["NO. GUIA"] = f_cols[0].text_input("NO. GUIA", value=str(val_guia))
+                    nuevos["NO. GUIA"] = f_cols[0].text_input("NO. GUIA", value=str(val_guia), key="textinput_guia")
 
                 # --- OTRAS COLUMNAS ---
                 for i, col in enumerate([c for c in cols_v if c != "NO. GUIA"]):
@@ -223,11 +223,11 @@ if st.session_state.columnas_confirmadas:
                             val = pd.to_datetime(val).strftime("%d/%m/%Y")
                         except:
                             val = str(val)
-                    nuevos[col] = f_cols[(i+1) % 3].text_input(col, value=str(val))
+                    nuevos[col] = f_cols[(i+1) % 3].text_input(col, value=str(val), key=f"textinput_{col}")
 
                 # --- BOTONES DE FORMULARIO ---
                 c_f1, c_f2 = st.columns(2)
-                if c_f1.form_submit_button("💾 Guardar Cambios"):
+                if c_f1.form_submit_button("💾 Guardar Cambios", key="btn_guardar"):
                     fila_base = df.loc[idx_sel].to_dict() if st.session_state.modo == "editar" and idx_sel is not None else {c: "" for c in df.columns}
                     fila_base.update(nuevos)
 
@@ -248,18 +248,18 @@ if st.session_state.columnas_confirmadas:
                     st.session_state.modo = None
                     st.rerun()
 
-                if c_f2.form_submit_button("🧹 Limpiar y Cerrar"):
+                if c_f2.form_submit_button("🧹 Limpiar y Cerrar", key="btn_limpiar"):
                     st.session_state.modo = None
                     st.rerun()
 
     # --- ELIMINACIÓN ---
     if st.session_state.modo == "confirmar_borrado":
-        if st.button("⚠️ Confirmar Eliminación"):
+        if st.button("⚠️ Confirmar Eliminación", key="btn_confirmar_borrado"):
             st.session_state.df_editada = df.drop(st.session_state.indices_borrar).reset_index(drop=True)
             st.session_state.historial.append(f"Eliminados registros {st.session_state.indices_borrar}")
             st.session_state.modo = None
             st.rerun()
-        if st.button("❌ Cancelar"):
+        if st.button("❌ Cancelar", key="btn_cancelar_borrado"):
             st.session_state.modo = None
             st.rerun()
 
@@ -269,10 +269,10 @@ if st.session_state.columnas_confirmadas:
     t1, t2, t3 = st.tabs(["📄 Exportación de Datos", "📉 Cuadro Estadístico de Totales", "📈 Gráficos Interactivos"])
 
     with t1:
-        tipo_exp = st.radio("Alcance:", ["Completo", "Filtrado por columna"], horizontal=True)
+        tipo_exp = st.radio("Alcance:", ["Completo", "Filtrado por columna"], horizontal=True, key="radio_export")
         df_e = df.copy()
         if tipo_exp == "Filtrado por columna":
-            c_e = st.multiselect("Columnas de exportación:", df.columns.tolist(), default=df.columns.tolist())
+            c_e = st.multiselect("Columnas de exportación:", df.columns.tolist(), default=df.columns.tolist(), key="multiselect_export")
             df_e = df_e[c_e]
         
         if 'FECHA' in df_e.columns: 
@@ -280,12 +280,12 @@ if st.session_state.columnas_confirmadas:
         st.dataframe(df_e, use_container_width=True)
         
         btn_e = descargar_excel_profesional(df_e, "Reporte de Operaciones")
-        st.download_button("🚀 Generar Excel de Datos", btn_e, "Reporte_Cargo.xlsx")
+        st.download_button("🚀 Generar Excel de Datos", btn_e, "Reporte_Cargo.xlsx", key="btn_excel_datos")
 
     with t2:
         st.markdown("<h3 style='text-align: center;'>CUADRO ESTADÍSTICO DE OPERACIONES</h3>", unsafe_allow_html=True)
-        op_calc = st.radio("Cálculo:", ["Contar Registros", "Sumar Cantidades"], horizontal=True)
-        c_stats = st.multiselect("Columnas para totalizar:", [c for c in df.columns if c != 'FECHA'])
+        op_calc = st.radio("Cálculo:", ["Contar Registros", "Sumar Cantidades"], horizontal=True, key="radio_calc")
+        c_stats = st.multiselect("Columnas para totalizar:", [c for c in df.columns if c != 'FECHA'], key="multiselect_stats")
         
         if c_stats and 'FECHA' in df.columns:
             res = df.copy()
@@ -305,7 +305,7 @@ if st.session_state.columnas_confirmadas:
                 st.table(res_final)
             
             btn_s = descargar_excel_profesional(res_final, "Cuadro Estadístico de Totales")
-            st.download_button("🚀 Exportar Totales Profesionales", btn_s, "Estadisticas_Cargo.xlsx")
+            st.download_button("🚀 Exportar Totales Profesionales", btn_s, "Estadisticas_Cargo.xlsx", key="btn_excel_totales")
 
     with t3:
         st.markdown("<h3 style='text-align: center;'>📈 Gráficos Interactivos</h3>", unsafe_allow_html=True)
