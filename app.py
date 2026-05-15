@@ -164,8 +164,8 @@ if st.session_state.columnas_confirmadas:
             c_e = st.multiselect("Columnas de exportación:", df.columns.tolist(), default=df.columns.tolist())
             df_e = df_e[c_e]
         
-                if 'FECHA' in df_e.columns: 
-            df_e['FECHA'] = df_e['FECHA'].dt.strftime('%d/%m/%Y')
+            if 'FECHA' in df_e.columns: 
+             df_e['FECHA'] = df_e['FECHA'].dt.strftime('%d/%m/%Y')
         st.dataframe(df_e, use_container_width=True)
         
         btn_e = descargar_excel_profesional(df_e, "Reporte de Operaciones")
