@@ -4,6 +4,12 @@ import estilos
 from io import BytesIO
 from datetime import datetime
 
+import streamlit as st
+import pandas as pd
+import estilos
+from io import BytesIO
+from datetime import datetime
+
 # Configuración de página
 st.set_page_config(page_title="Sistema CARGO PESCA PRO", layout="wide")
 
@@ -12,12 +18,55 @@ if "df_editada" not in st.session_state: st.session_state.df_editada = None
 if "columnas_confirmadas" not in st.session_state: st.session_state.columnas_confirmadas = False
 if "modo" not in st.session_state: st.session_state.modo = None
 if "registro_a_editar" not in st.session_state: st.session_state.registro_a_editar = None
+if "indices_editar" not in st.session_state: st.session_state.indices_editar = []
 if "historial" not in st.session_state: st.session_state.historial = []
 if "archivo_actual" not in st.session_state: st.session_state.archivo_actual = None
 if "numero_reporte" not in st.session_state: st.session_state.numero_reporte = None
 
 estilos.aplicar_estilos()
 estilos.mostrar_cabecera()
+
+# --- FUNCIÓN DE EXCEL PROFESIONAL ---
+def descargar_excel_profesional(df, titulo_reporte):
+    output = BytesIO()
+    df_clean = df.fillna("")
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df_clean.to_excel(writer, index=False, sheet_name='Reporte', startrow=3)
+        workbook = writer.book
+        worksheet = writer.sheets['Reporte']
+
+        fmt_titulo = workbook.add_format({'bold': True, 'font_size': 14, 'align': 'center'})
+        fmt_header = workbook.add_format({'bold': True, 'bg_color': '#0070C0', 'font_color': 'white', 'border': 1, 'align': 'center'})
+        fmt_celda = workbook.add_format({'border': 1, 'align': 'center'})
+
+        worksheet.merge_range(1, 0, 1, len(df.columns)-1, titulo_reporte.upper(), fmt_titulo)
+
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(3, col_num, value, fmt_header)
+            worksheet.set_column(col_num, col_num, 18)
+
+        worksheet.autofilter(3, 0, 3, len(df.columns)-1)
+        
+        for row in range(len(df_clean)):
+            for col in range(len(df_clean.columns)):
+                worksheet.write(row + 4, col, df_clean.iloc[row, col], fmt_celda)
+                
+    return output.getvalue()
+
+# --- SUBIDA DE ARCHIVO Y NÚMERO DE REPORTE ---
+archivo = st.file_uploader("Subir archivo de CARGO PESCA", type=["xlsx", "xls"])
+
+if archivo:
+    if st.session_state.archivo_actual != archivo.name:
+        st.session_state.archivo_actual = archivo.name
+        st.session_state.numero_reporte = f"REP-{datetime.now().strftime('%d%m%Y')}-{datetime.now().strftime('%H%M%S')}"
+        st.session_state.columnas_confirmadas = False
+        st.session_state.df_editada = None
+
+    st.success(f"📑 Número de Reporte generado: {st.session_state.numero_reporte}")
+    if st.button("🔖 Mostrar Número de Reporte"):
+        st.info(f"Este archivo corresponde al reporte: **{st.session_state.numero_reporte}**")
+
 
 # --- FUNCIÓN DE EXCEL PROFESIONAL ---
 def descargar_excel_profesional(df, titulo_reporte):
@@ -59,7 +108,7 @@ if archivo:
     st.success(f"📑 Número de Reporte generado: {st.session_state.numero_reporte}")
     if st.button("🔖 Mostrar Número de Reporte"):
         st.info(f"Este archivo corresponde al reporte: **{st.session_state.numero_reporte}**")
-# --- 1. CONFIGURAR ESTRUCTURA ---
+# --- 1. CONFIGURAR ESTRUCTURA --- 
 if archivo and not st.session_state.columnas_confirmadas:
     try:
         st.subheader("🛠️ Paso 1: Configurar Estructura")
@@ -127,49 +176,6 @@ if st.session_state.columnas_confirmadas:
     if sugerencias:
         seleccion = st.selectbox("Coincidencias encontradas:", sugerencias)
         df = df[df.apply(lambda row: seleccion in row.values, axis=1)]
-    # FORMULARIO DE EDICIÓN / NUEVO
-    if st.session_state.modo in ["editar", "nuevo"]:
-        with st.expander("📝 Formulario de Registro", expanded=True):
-            with st.form("form_gestion"):
-                nuevos = {}
-                f_cols = st.columns(3)
-
-                # Si hay múltiples seleccionados, la caja NO. GUIA se convierte en selectbox
-                if st.session_state.modo == "editar" and len(st.session_state.indices_editar) > 1 and "NO. GUIA" in df.columns:
-                    guias = df.loc[st.session_state.indices_editar, "NO. GUIA"].tolist()
-                    guia_sel = f_cols[0].selectbox("NO. GUIA", guias)
-                    idx_sel = df[df["NO. GUIA"] == guia_sel].index[0]
-                else:
-                    idx_sel = st.session_state.indices_editar[0] if st.session_state.modo == "editar" else None
-                    # Caja normal de texto para NO. GUIA
-                    val_guia = df.loc[idx_sel, "NO. GUIA"] if st.session_state.modo == "editar" and idx_sel is not None else ""
-                    nuevos["NO. GUIA"] = f_cols[0].text_input("NO. GUIA", value=str(val_guia))
-
-                # Mostrar las demás columnas
-                for i, col in enumerate([c for c in cols_v if c != "NO. GUIA"]):
-                    val = df.loc[idx_sel, col] if st.session_state.modo == "editar" and idx_sel is not None else ""
-                    # Formato especial para FECHA
-                    if col == "FECHA" and val != "":
-                        val = pd.to_datetime(val).strftime("%d/%m/%Y")
-                    nuevos[col] = f_cols[(i+1) % 3].text_input(col, value=str(val))
-
-                c_f1, c_f2 = st.columns(2)
-                if c_f1.form_submit_button("💾 Guardar Cambios"):
-                    fila_base = df.loc[idx_sel].to_dict() if st.session_state.modo == "editar" and idx_sel is not None else {c: "" for c in df.columns}
-                    fila_base.update(nuevos)
-                    
-                    if st.session_state.modo == "editar":
-                        st.session_state.df_editada.loc[idx_sel] = pd.Series(fila_base)
-                        st.session_state.historial.append(f"Editado registro {idx_sel}")
-                    else:
-                        st.session_state.df_editada = pd.concat([df, pd.DataFrame([fila_base])], ignore_index=True)
-                        st.session_state.historial.append("Agregado nuevo registro")
-                    
-                    st.session_state.modo = None; st.rerun()
-                
-                if c_f2.form_submit_button("🧹 Limpiar y Cerrar"):
-                    st.session_state.modo = None; st.rerun()
-
 
     # Selección de columnas
     cols_v = st.multiselect("Seleccionar columnas de trabajo:", df.columns.tolist(), default=df.columns.tolist()[:7])
@@ -191,49 +197,71 @@ if st.session_state.columnas_confirmadas:
         st.session_state.modo = "confirmar_borrado"; st.session_state.indices_borrar = indices
     if bg3.button("➕ Agregar Registro"):
         st.session_state.modo = "nuevo"
-        # FORMULARIO DE EDICIÓN / NUEVO
+    # FORMULARIO DE EDICIÓN / NUEVO
     if st.session_state.modo in ["editar", "nuevo"]:
         with st.expander("📝 Formulario de Registro", expanded=True):
             with st.form("form_gestion"):
                 nuevos = {}
                 f_cols = st.columns(3)
 
-                # Si hay múltiples seleccionados, mostrar selectbox con las guías
+                # --- NO. GUIA ---
                 if st.session_state.modo == "editar" and len(st.session_state.indices_editar) > 1 and "NO. GUIA" in df.columns:
                     guias = df.loc[st.session_state.indices_editar, "NO. GUIA"].tolist()
-                    guia_sel = st.selectbox("Seleccionar NO. GUIA:", guias)
+                    guia_sel = f_cols[0].selectbox("NO. GUIA", guias)
                     idx_sel = df[df["NO. GUIA"] == guia_sel].index[0]
+                    nuevos["NO. GUIA"] = guia_sel
                 else:
-                    idx_sel = st.session_state.indices_editar[0] if st.session_state.modo == "editar" else None
+                    idx_sel = st.session_state.indices_editar[0] if st.session_state.modo == "editar" and st.session_state.indices_editar else None
+                    val_guia = df.loc[idx_sel, "NO. GUIA"] if st.session_state.modo == "editar" and idx_sel is not None else ""
+                    nuevos["NO. GUIA"] = f_cols[0].text_input("NO. GUIA", value=str(val_guia))
 
-                for i, col in enumerate(cols_v):
+                # --- OTRAS COLUMNAS ---
+                for i, col in enumerate([c for c in cols_v if c != "NO. GUIA"]):
                     val = df.loc[idx_sel, col] if st.session_state.modo == "editar" and idx_sel is not None else ""
-                    nuevos[col] = f_cols[i % 3].text_input(col, value=str(val))
+                    if col == "FECHA" and val != "":
+                        try:
+                            val = pd.to_datetime(val).strftime("%d/%m/%Y")
+                        except:
+                            val = str(val)
+                    nuevos[col] = f_cols[(i+1) % 3].text_input(col, value=str(val))
 
+                # --- BOTONES DE FORMULARIO ---
                 c_f1, c_f2 = st.columns(2)
                 if c_f1.form_submit_button("💾 Guardar Cambios"):
                     fila_base = df.loc[idx_sel].to_dict() if st.session_state.modo == "editar" and idx_sel is not None else {c: "" for c in df.columns}
                     fila_base.update(nuevos)
-                    
+
+                    # Convertir FECHA al guardar
+                    if "FECHA" in fila_base and fila_base["FECHA"] != "":
+                        try:
+                            fila_base["FECHA"] = pd.to_datetime(fila_base["FECHA"], format="%d/%m/%Y", errors="coerce")
+                        except:
+                            pass
+
                     if st.session_state.modo == "editar":
                         st.session_state.df_editada.loc[idx_sel] = pd.Series(fila_base)
                         st.session_state.historial.append(f"Editado registro {idx_sel}")
                     else:
                         st.session_state.df_editada = pd.concat([df, pd.DataFrame([fila_base])], ignore_index=True)
                         st.session_state.historial.append("Agregado nuevo registro")
-                    
-                    st.session_state.modo = None; st.rerun()
-                
-                if c_f2.form_submit_button("🧹 Limpiar y Cerrar"):
-                    st.session_state.modo = None; st.rerun()
 
+                    st.session_state.modo = None
+                    st.rerun()
+
+                if c_f2.form_submit_button("🧹 Limpiar y Cerrar"):
+                    st.session_state.modo = None
+                    st.rerun()
+
+    # --- ELIMINACIÓN ---
     if st.session_state.modo == "confirmar_borrado":
         if st.button("⚠️ Confirmar Eliminación"):
             st.session_state.df_editada = df.drop(st.session_state.indices_borrar).reset_index(drop=True)
             st.session_state.historial.append(f"Eliminados registros {st.session_state.indices_borrar}")
-            st.session_state.modo = None; st.rerun()
+            st.session_state.modo = None
+            st.rerun()
         if st.button("❌ Cancelar"):
-            st.session_state.modo = None; st.rerun()
+            st.session_state.modo = None
+            st.rerun()
 
     # --- REPORTES Y ESTADÍSTICAS ---
     st.write("---")
