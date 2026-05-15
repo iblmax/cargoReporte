@@ -150,60 +150,65 @@ if st.session_state.columnas_confirmadas:
         st.session_state.modo = "confirmar_borrado"; st.session_state.indices_borrar = indices
     if bg3.button("➕ Agregar Registro", key="btn_agregar"):
         st.session_state.modo = "nuevo"
-    # FORMULARIO DE EDICIÓN / NUEVO
-    if st.session_state.modo in ["editar", "nuevo"]:
-        with st.expander("📝 Formulario de Registro", expanded=True):
-            with st.form("form_gestion", clear_on_submit=False):
-                nuevos = {}
-                f_cols = st.columns(3)
+# --- FORMULARIO DE EDICIÓN / NUEVO ---
+if st.session_state.modo in ["editar", "nuevo"]:
+    with st.expander("📝 Formulario de Registro", expanded=True):
+        with st.form("form_gestion", clear_on_submit=False):
+            nuevos = {}
+            f_cols = st.columns(3)
 
-                # --- NO. GUIA ---
-                if st.session_state.modo == "editar" and len(st.session_state.indices_editar) > 1 and "NO. GUIA" in df.columns:
-                    guias = df.loc[st.session_state.indices_editar, "NO. GUIA"].tolist()
-                    guia_sel = f_cols[0].selectbox("NO. GUIA", guias, key="selectbox_guia")
-                    idx_sel = df[df["NO. GUIA"] == guia_sel].index[0]
-                    nuevos["NO. GUIA"] = guia_sel
+            # --- NO. GUIA ---
+            if st.session_state.modo == "editar" and len(st.session_state.indices_editar) > 1 and "NO. GUIA" in df.columns:
+                guias = df.loc[st.session_state.indices_editar, "NO. GUIA"].tolist()
+                guia_sel = f_cols[0].selectbox("NO. GUIA", guias, key="selectbox_guia")
+
+                # Guardar el índice del registro seleccionado
+                idx_sel = df[df["NO. GUIA"] == guia_sel].index[0]
+                st.session_state.registro_a_editar = idx_sel
+                nuevos["NO. GUIA"] = guia_sel
+            else:
+                idx_sel = st.session_state.indices_editar[0] if st.session_state.modo == "editar" and st.session_state.indices_editar else None
+                st.session_state.registro_a_editar = idx_sel
+                val_guia = df.loc[idx_sel, "NO. GUIA"] if st.session_state.modo == "editar" and idx_sel is not None else ""
+                nuevos["NO. GUIA"] = f_cols[0].text_input("NO. GUIA", value=str(val_guia), key="textinput_guia")
+
+            # --- OTRAS COLUMNAS ---
+            for i, col in enumerate([c for c in cols_v if c != "NO. GUIA"]):
+                val = df.loc[st.session_state.registro_a_editar, col] if st.session_state.modo == "editar" and st.session_state.registro_a_editar is not None else ""
+                if col == "FECHA" and val != "":
+                    try:
+                        val = pd.to_datetime(val).strftime("%d/%m/%Y")
+                    except:
+                        val = str(val)
+                nuevos[col] = f_cols[(i+1) % 3].text_input(col, value=str(val), key=f"textinput_{col}")
+
+            # --- BOTONES ---
+            c_f1, c_f2 = st.columns(2)
+            if c_f1.form_submit_button("💾 Guardar Cambios", key="btn_guardar"):
+                fila_base = df.loc[st.session_state.registro_a_editar].to_dict() if st.session_state.modo == "editar" and st.session_state.registro_a_editar is not None else {c: "" for c in df.columns}
+                fila_base.update(nuevos)
+
+                # Convertir FECHA al guardar
+                if "FECHA" in fila_base and fila_base["FECHA"] != "":
+                    try:
+                        fila_base["FECHA"] = pd.to_datetime(fila_base["FECHA"], format="%d/%m/%Y", errors="coerce")
+                    except:
+                        pass
+
+                if st.session_state.modo == "editar":
+                    st.session_state.df_editada.loc[st.session_state.registro_a_editar] = pd.Series(fila_base)
+                    st.session_state.historial.append(f"Editado registro {st.session_state.registro_a_editar}")
                 else:
-                    idx_sel = st.session_state.indices_editar[0] if st.session_state.modo == "editar" and st.session_state.indices_editar else None
-                    val_guia = df.loc[idx_sel, "NO. GUIA"] if st.session_state.modo == "editar" and idx_sel is not None else ""
-                    nuevos["NO. GUIA"] = f_cols[0].text_input("NO. GUIA", value=str(val_guia), key="textinput_guia")
+                    st.session_state.df_editada = pd.concat([df, pd.DataFrame([fila_base])], ignore_index=True)
+                    st.session_state.historial.append("Agregado nuevo registro")
 
-                # --- OTRAS COLUMNAS ---
-                for i, col in enumerate([c for c in cols_v if c != "NO. GUIA"]):
-                    val = df.loc[idx_sel, col] if st.session_state.modo == "editar" and idx_sel is not None else ""
-                    if col == "FECHA" and val != "":
-                        try:
-                            val = pd.to_datetime(val).strftime("%d/%m/%Y")
-                        except:
-                            val = str(val)
-                    nuevos[col] = f_cols[(i+1) % 3].text_input(col, value=str(val), key=f"textinput_{col}")
+                st.session_state.modo = None
+                st.rerun()
 
-                # --- BOTONES DE FORMULARIO ---
-                c_f1, c_f2 = st.columns(2)
-                if c_f1.form_submit_button("💾 Guardar Cambios", key="btn_guardar"):
-                    fila_base = df.loc[idx_sel].to_dict() if st.session_state.modo == "editar" and idx_sel is not None else {c: "" for c in df.columns}
-                    fila_base.update(nuevos)
+            if c_f2.form_submit_button("🧹 Limpiar y Cerrar", key="btn_limpiar"):
+                st.session_state.modo = None
+                st.rerun()
 
-                    # Convertir FECHA al guardar
-                    if "FECHA" in fila_base and fila_base["FECHA"] != "":
-                        try:
-                            fila_base["FECHA"] = pd.to_datetime(fila_base["FECHA"], format="%d/%m/%Y", errors="coerce")
-                        except:
-                            pass
-
-                    if st.session_state.modo == "editar":
-                        st.session_state.df_editada.loc[idx_sel] = pd.Series(fila_base)
-                        st.session_state.historial.append(f"Editado registro {idx_sel}")
-                    else:
-                        st.session_state.df_editada = pd.concat([df, pd.DataFrame([fila_base])], ignore_index=True)
-                        st.session_state.historial.append("Agregado nuevo registro")
-
-                    st.session_state.modo = None
-                    st.rerun()
-
-                if c_f2.form_submit_button("🧹 Limpiar y Cerrar", key="btn_limpiar"):
-                    st.session_state.modo = None
-                    st.rerun()
 
     # --- ELIMINACIÓN ---
     if st.session_state.modo == "confirmar_borrado":
