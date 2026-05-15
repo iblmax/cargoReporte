@@ -160,21 +160,29 @@ if st.session_state.modo in ["editar", "nuevo"]:
             nuevos = {}
             f_cols = st.columns(3)
 
+            # Asegurarse de que el índice de edición se inicializa en la selección actual.
+            if st.session_state.modo == "editar" and st.session_state.indices_editar:
+                if st.session_state.registro_a_editar not in st.session_state.indices_editar:
+                    st.session_state.registro_a_editar = st.session_state.indices_editar[0]
+
             # --- NO. GUIA ---
             if st.session_state.modo == "editar" and len(st.session_state.indices_editar) > 1 and "NO. GUIA" in df.columns:
-                guias = df.loc[st.session_state.indices_editar, "NO. GUIA"].tolist()
+                guias = df.loc[st.session_state.indices_editar, "NO. GUIA"].astype(str).tolist()
                 guia_sel = f_cols[0].selectbox("NO. GUIA", guias, key="selectbox_guia")
 
-                # Guardar el índice del registro seleccionado
-                idx_sel = df[df["NO. GUIA"] == guia_sel].index[0]
+                # Guardar el índice del registro seleccionado solo dentro de la selección actual
+                selected_rows = df.loc[st.session_state.indices_editar]
+                idx_sel = selected_rows[selected_rows["NO. GUIA"].astype(str) == guia_sel].index[0]
                 if st.session_state.registro_a_editar != idx_sel:
                     st.session_state.registro_a_editar = idx_sel
                     st.rerun()
                 nuevos["NO. GUIA"] = guia_sel
             else:
-                idx_sel = st.session_state.indices_editar[0] if st.session_state.modo == "editar" and st.session_state.indices_editar else None
-                st.session_state.registro_a_editar = idx_sel
-                val_guia = df.loc[idx_sel, "NO. GUIA"] if st.session_state.modo == "editar" and idx_sel is not None else ""
+                idx_sel = st.session_state.registro_a_editar if st.session_state.modo == "editar" and st.session_state.registro_a_editar is not None else None
+                if idx_sel is None and st.session_state.modo == "editar" and st.session_state.indices_editar:
+                    idx_sel = st.session_state.indices_editar[0]
+                    st.session_state.registro_a_editar = idx_sel
+                val_guia = df.loc[idx_sel, "NO. GUIA"] if idx_sel is not None else ""
                 nuevos["NO. GUIA"] = f_cols[0].text_input("NO. GUIA", value=str(val_guia), key="textinput_guia")
 
             # --- OTRAS COLUMNAS ---
@@ -292,4 +300,3 @@ if st.session_state.columnas_confirmadas:
             st.write(f"- {h}")
     else:
         st.info("No se han registrado cambios aún.")
-
