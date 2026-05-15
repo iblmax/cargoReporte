@@ -271,6 +271,9 @@ if st.session_state.columnas_confirmadas:
             c_stats_chart = st.multiselect("Columnas para gráficos:", [c for c in st.session_state.df_editada.columns if c != 'FECHA'], key="multiselect_chart")
             if c_stats_chart:
                 res = st.session_state.df_editada.copy()
+                # Convertir columnas a numéricas para gráficos
+                for c in c_stats_chart:
+                    res[c] = pd.to_numeric(res[c].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
                 resumen = res.groupby(res['FECHA'].dt.date)[c_stats_chart].agg('sum').reset_index()
                 chart_data = resumen.set_index("FECHA")
                 st.bar_chart(chart_data)
