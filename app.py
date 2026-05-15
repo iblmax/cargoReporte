@@ -54,7 +54,7 @@ def descargar_excel_profesional(df, titulo_reporte):
     return output.getvalue()
 
 # --- SUBIDA DE ARCHIVO Y NÚMERO DE REPORTE ---
-archivo = st.file_uploader("Subir archivo de CARGO PESCA", type=["xlsx", "xls"])
+archivo = st.file_uploader("Subir archivo de CARGO PESCA", type=["xlsx", "xls"], key="archivo_principal")
 
 if archivo:
     if st.session_state.archivo_actual != archivo.name:
