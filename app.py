@@ -4,12 +4,6 @@ import estilos
 from io import BytesIO
 from datetime import datetime
 
-import streamlit as st
-import pandas as pd
-import estilos
-from io import BytesIO
-from datetime import datetime
-
 # Configuración de página
 st.set_page_config(page_title="Sistema CARGO PESCA PRO", layout="wide")
 
@@ -54,7 +48,7 @@ def descargar_excel_profesional(df, titulo_reporte):
     return output.getvalue()
 
 # --- SUBIDA DE ARCHIVO Y NÚMERO DE REPORTE ---
-archivo = st.file_uploader("Subir archivo de CARGO PESCA", type=["xlsx", "xls"], key="archivo_principal")
+archivo = st.file_uploader("Subir archivo de CARGO PESCA", type=["xlsx", "xls"], key="file_uploader_principal")
 
 if archivo:
     if st.session_state.archivo_actual != archivo.name:
@@ -64,51 +58,11 @@ if archivo:
         st.session_state.df_editada = None
 
     st.success(f"📑 Número de Reporte generado: {st.session_state.numero_reporte}")
-    if st.button("🔖 Mostrar Número de Reporte"):
+    if st.button("🔖 Mostrar Número de Reporte", key="btn_mostrar_reporte"):
         st.info(f"Este archivo corresponde al reporte: **{st.session_state.numero_reporte}**")
 
 
-# --- FUNCIÓN DE EXCEL PROFESIONAL ---
-def descargar_excel_profesional(df, titulo_reporte):
-    output = BytesIO()
-    df_clean = df.fillna("")
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df_clean.to_excel(writer, index=False, sheet_name='Reporte', startrow=3)
-        workbook = writer.book
-        worksheet = writer.sheets['Reporte']
-
-        fmt_titulo = workbook.add_format({'bold': True, 'font_size': 14, 'align': 'center'})
-        fmt_header = workbook.add_format({'bold': True, 'bg_color': '#0070C0', 'font_color': 'white', 'border': 1, 'align': 'center'})
-        fmt_celda = workbook.add_format({'border': 1, 'align': 'center'})
-
-        worksheet.merge_range(1, 0, 1, len(df.columns)-1, titulo_reporte.upper(), fmt_titulo)
-
-        for col_num, value in enumerate(df.columns.values):
-            worksheet.write(3, col_num, value, fmt_header)
-            worksheet.set_column(col_num, col_num, 18)
-
-        worksheet.autofilter(3, 0, 3, len(df.columns)-1)
-        
-        for row in range(len(df_clean)):
-            for col in range(len(df_clean.columns)):
-                worksheet.write(row + 4, col, df_clean.iloc[row, col], fmt_celda)
-                
-    return output.getvalue()
-
-# --- SUBIDA DE ARCHIVO Y NÚMERO DE REPORTE ---
-archivo = st.file_uploader("Subir archivo de CARGO PESCA", type=["xlsx", "xls"])
-
-if archivo:
-    if st.session_state.archivo_actual != archivo.name:
-        st.session_state.archivo_actual = archivo.name
-        st.session_state.numero_reporte = f"REP-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        st.session_state.columnas_confirmadas = False
-        st.session_state.df_editada = None
-
-    st.success(f"📑 Número de Reporte generado: {st.session_state.numero_reporte}")
-    if st.button("🔖 Mostrar Número de Reporte"):
-        st.info(f"Este archivo corresponde al reporte: **{st.session_state.numero_reporte}**")
-# --- 1. CONFIGURAR ESTRUCTURA --- 
+# --- 1. CONFIGURAR ESTRUCTURA ---
 if archivo and not st.session_state.columnas_confirmadas:
     try:
         st.subheader("🛠️ Paso 1: Configurar Estructura")
@@ -116,10 +70,10 @@ if archivo and not st.session_state.columnas_confirmadas:
         
         c1, c2 = st.columns([1, 2])
         with c1:
-            orientacion = st.radio("📑 Títulos en:", ["Horizontal (Fila)", "Vertical (Columna)"])
-            idx_titulo = st.number_input("Número de Índice:", 0, 14, 0)
+            orientacion = st.radio("📑 Títulos en:", ["Horizontal (Fila)", "Vertical (Columna)"], key="radio_orientacion")
+            idx_titulo = st.number_input("Número de Índice:", 0, 14, 0, key="num_indice")
             
-            if st.button("✅ Confirmar Estructura", type="primary"):
+            if st.button("✅ Confirmar Estructura", type="primary", key="btn_confirmar_estructura"):
                 if orientacion == "Horizontal (Fila)":
                     df_res = pd.read_excel(archivo, skiprows=idx_titulo)
                 else:
@@ -151,7 +105,6 @@ if archivo and not st.session_state.columnas_confirmadas:
             st.dataframe(df_ref.style.apply(highlight, axis=None), use_container_width=True)
     except Exception as e:
         st.error(f"❌ Error al procesar archivo: {e}")
-
 # --- 2. GESTIÓN Y EDICIÓN ---
 if st.session_state.columnas_confirmadas:
     df = st.session_state.df_editada
@@ -160,12 +113,12 @@ if st.session_state.columnas_confirmadas:
     # Filtro por fecha
     if 'FECHA' in df.columns:
         fecha_min, fecha_max = df['FECHA'].min(), df['FECHA'].max()
-        rango = st.date_input("📅 Rango de fechas:", [fecha_min, fecha_max])
+        rango = st.date_input("📅 Rango de fechas:", [fecha_min, fecha_max], key="date_rango")
         if len(rango) == 2:
             df = df[(df['FECHA'] >= pd.to_datetime(rango[0])) & (df['FECHA'] <= pd.to_datetime(rango[1]))]
 
     # Barra de búsqueda con autocompletado
-    query = st.text_input("🔎 Buscar por nombre o número de guía:")
+    query = st.text_input("🔎 Buscar por nombre o número de guía:", key="txt_busqueda")
     sugerencias = []
     if query:
         for col in ["NO. GUIA", "CLIENTE", "CHOFER"]:
@@ -174,11 +127,11 @@ if st.session_state.columnas_confirmadas:
                 sugerencias.extend(coincidencias)
         sugerencias = list(set(sugerencias))
     if sugerencias:
-        seleccion = st.selectbox("Coincidencias encontradas:", sugerencias)
+        seleccion = st.selectbox("Coincidencias encontradas:", sugerencias, key="selectbox_busqueda")
         df = df[df.apply(lambda row: seleccion in row.values, axis=1)]
 
     # Selección de columnas
-    cols_v = st.multiselect("Seleccionar columnas de trabajo:", df.columns.tolist(), default=df.columns.tolist()[:7])
+    cols_v = st.multiselect("Seleccionar columnas de trabajo:", df.columns.tolist(), default=df.columns.tolist()[:7], key="multiselect_columnas")
 
     df_disp = df.copy()
     if 'FECHA' in df_disp.columns:
@@ -186,18 +139,18 @@ if st.session_state.columnas_confirmadas:
     
     df_disp.insert(0, "SELEC", False)
     cols_finales = ["SELEC"] + ([c for c in cols_v if c != 'FECHA'] + (['FECHA_V'] if 'FECHA' in df.columns else []))
-    editor = st.data_editor(df_disp[cols_finales], hide_index=True, use_container_width=True)
+    editor = st.data_editor(df_disp[cols_finales], hide_index=True, use_container_width=True, key="editor_tabla")
     
     indices = editor[editor["SELEC"] == True].index.tolist()
 
     bg1, bg2, bg3 = st.columns(3)
-    if bg1.button("🔧 Editar Registro", disabled=not indices):
+    if bg1.button("🔧 Editar Registro", disabled=not indices, key="btn_editar"):
         st.session_state.modo = "editar"; st.session_state.indices_editar = indices
-    if bg2.button("🗑️ Eliminar Registro", type="primary", disabled=not indices):
+    if bg2.button("🗑️ Eliminar Registro", type="primary", disabled=not indices, key="btn_eliminar"):
         st.session_state.modo = "confirmar_borrado"; st.session_state.indices_borrar = indices
-    if bg3.button("➕ Agregar Registro"):
+    if bg3.button("➕ Agregar Registro", key="btn_agregar"):
         st.session_state.modo = "nuevo"
-        # FORMULARIO DE EDICIÓN / NUEVO
+    # FORMULARIO DE EDICIÓN / NUEVO
     if st.session_state.modo in ["editar", "nuevo"]:
         with st.expander("📝 Formulario de Registro", expanded=True):
             with st.form("form_gestion", clear_on_submit=False):
