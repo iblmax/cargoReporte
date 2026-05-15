@@ -145,7 +145,10 @@ if st.session_state.columnas_confirmadas:
 
     bg1, bg2, bg3 = st.columns(3)
     if bg1.button("🔧 Editar Registro", disabled=not indices, key="btn_editar"):
-        st.session_state.modo = "editar"; st.session_state.indices_editar = indices
+        if st.session_state.indices_editar != indices:
+            st.session_state.indices_editar = indices
+            st.session_state.registro_a_editar = None  # Reset para forzar recarga
+        st.session_state.modo = "editar"
     if bg2.button("🗑️ Eliminar Registro", type="primary", disabled=not indices, key="btn_eliminar"):
         st.session_state.modo = "confirmar_borrado"; st.session_state.indices_borrar = indices
     if bg3.button("➕ Agregar Registro", key="btn_agregar"):
@@ -164,7 +167,9 @@ if st.session_state.modo in ["editar", "nuevo"]:
 
                 # Guardar el índice del registro seleccionado
                 idx_sel = df[df["NO. GUIA"] == guia_sel].index[0]
-                st.session_state.registro_a_editar = idx_sel
+                if st.session_state.registro_a_editar != idx_sel:
+                    st.session_state.registro_a_editar = idx_sel
+                    st.rerun()
                 nuevos["NO. GUIA"] = guia_sel
             else:
                 idx_sel = st.session_state.indices_editar[0] if st.session_state.modo == "editar" and st.session_state.indices_editar else None
@@ -287,3 +292,4 @@ if st.session_state.columnas_confirmadas:
             st.write(f"- {h}")
     else:
         st.info("No se han registrado cambios aún.")
+
