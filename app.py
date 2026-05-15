@@ -127,6 +127,49 @@ if st.session_state.columnas_confirmadas:
     if sugerencias:
         seleccion = st.selectbox("Coincidencias encontradas:", sugerencias)
         df = df[df.apply(lambda row: seleccion in row.values, axis=1)]
+    # FORMULARIO DE EDICIÓN / NUEVO
+    if st.session_state.modo in ["editar", "nuevo"]:
+        with st.expander("📝 Formulario de Registro", expanded=True):
+            with st.form("form_gestion"):
+                nuevos = {}
+                f_cols = st.columns(3)
+
+                # Si hay múltiples seleccionados, la caja NO. GUIA se convierte en selectbox
+                if st.session_state.modo == "editar" and len(st.session_state.indices_editar) > 1 and "NO. GUIA" in df.columns:
+                    guias = df.loc[st.session_state.indices_editar, "NO. GUIA"].tolist()
+                    guia_sel = f_cols[0].selectbox("NO. GUIA", guias)
+                    idx_sel = df[df["NO. GUIA"] == guia_sel].index[0]
+                else:
+                    idx_sel = st.session_state.indices_editar[0] if st.session_state.modo == "editar" else None
+                    # Caja normal de texto para NO. GUIA
+                    val_guia = df.loc[idx_sel, "NO. GUIA"] if st.session_state.modo == "editar" and idx_sel is not None else ""
+                    nuevos["NO. GUIA"] = f_cols[0].text_input("NO. GUIA", value=str(val_guia))
+
+                # Mostrar las demás columnas
+                for i, col in enumerate([c for c in cols_v if c != "NO. GUIA"]):
+                    val = df.loc[idx_sel, col] if st.session_state.modo == "editar" and idx_sel is not None else ""
+                    # Formato especial para FECHA
+                    if col == "FECHA" and val != "":
+                        val = pd.to_datetime(val).strftime("%d/%m/%Y")
+                    nuevos[col] = f_cols[(i+1) % 3].text_input(col, value=str(val))
+
+                c_f1, c_f2 = st.columns(2)
+                if c_f1.form_submit_button("💾 Guardar Cambios"):
+                    fila_base = df.loc[idx_sel].to_dict() if st.session_state.modo == "editar" and idx_sel is not None else {c: "" for c in df.columns}
+                    fila_base.update(nuevos)
+                    
+                    if st.session_state.modo == "editar":
+                        st.session_state.df_editada.loc[idx_sel] = pd.Series(fila_base)
+                        st.session_state.historial.append(f"Editado registro {idx_sel}")
+                    else:
+                        st.session_state.df_editada = pd.concat([df, pd.DataFrame([fila_base])], ignore_index=True)
+                        st.session_state.historial.append("Agregado nuevo registro")
+                    
+                    st.session_state.modo = None; st.rerun()
+                
+                if c_f2.form_submit_button("🧹 Limpiar y Cerrar"):
+                    st.session_state.modo = None; st.rerun()
+
 
     # Selección de columnas
     cols_v = st.multiselect("Seleccionar columnas de trabajo:", df.columns.tolist(), default=df.columns.tolist()[:7])
